@@ -19,6 +19,7 @@ import {
   WorkspaceSnapshot,
 } from '../types/portfolio';
 import { SAMPLE_PROJECT_COVER_ONE, SAMPLE_PROJECT_COVER_TWO } from '../data/presets';
+import { fetchJsonSafe } from '../utils/apiClient';
 
 interface AIModePanelProps {
   data: PortfolioData;
@@ -145,7 +146,7 @@ export const AIModePanel: React.FC<AIModePanelProps> = ({
     try {
       const historyPayload = messages.slice(-6).map((m) => ({ role: m.role, text: m.text }));
 
-      const res = await fetch('/api/ai/instruct', {
+      const json = await fetchJsonSafe<AIInstructResponse>('/api/ai/instruct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,9 +160,8 @@ export const AIModePanel: React.FC<AIModePanelProps> = ({
         }),
       });
 
-      const json = (await res.json()) as AIInstructResponse & { error?: string };
-      if (!res.ok || !json.portfolioData) {
-        throw new Error(json.error || 'AI could not process that instruction. Please try again.');
+      if (!json.portfolioData) {
+        throw new Error('AI could not process that instruction. Please try again.');
       }
 
       // Preserve uploaded photoDataUrl and existing project cover images by matching ID or title

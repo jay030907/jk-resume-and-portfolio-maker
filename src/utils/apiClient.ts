@@ -1,0 +1,37 @@
+export async function fetchJsonSafe<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const res = await fetch(input, init);
+  const rawText = await res.text();
+
+  let parsed: (T & { error?: string }) | null = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText) as T & { error?: string };
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!res.ok) {
+    if (parsed?.error) {
+      throw new Error(parsed.error);
+    }
+    if (res.status === 404) {
+      throw new Error(
+        'API route was not found on this deployment. Ensure the /api serverless handler is deployed and GEMINI_API_KEY is configured in Environment Variables.'
+      );
+    }
+    throw new Error(
+      rawText && rawText.length < 180
+        ? rawText
+        : `Request failed with status ${res.status}. Please try again.`
+    );
+  }
+
+  if (!parsed) {
+    throw new Error(
+      'Received a non-JSON response from the backend API. Ensure /api routes are active and GEMINI_API_KEY is configured.'
+    );
+  }
+
+  return parsed;
+}

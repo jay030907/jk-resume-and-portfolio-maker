@@ -29,6 +29,7 @@ import {
   SAMPLE_PROJECT_COVER_TWO,
 } from '../data/presets';
 import { PlatformIcon } from './PlatformIcon';
+import { fetchJsonSafe } from '../utils/apiClient';
 
 export type BuilderTab = 'identity' | 'links' | 'projects' | 'background';
 
@@ -166,9 +167,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
 
     try {
       if (acc.platform === 'github') {
-        const res = await fetch(`/api/profiles/github/${encodeURIComponent(handle)}`);
-        const json = (await res.json()) as GitHubSyncResponse & { error?: string };
-        if (!res.ok) throw new Error(json.error || 'GitHub sync failed');
+        const json = await fetchJsonSafe<GitHubSyncResponse>(
+          `/api/profiles/github/${encodeURIComponent(handle)}`
+        );
 
         const statText = `${json.publicRepos} Public Repos · ${json.followers} Followers`;
         const updatedAccounts = data.accounts.map((a) =>
@@ -188,15 +189,12 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           text: `Synced @${json.username} (${json.publicRepos} repos). You can import repositories in the Projects tab.`,
         });
       } else if (acc.platform === 'codeforces') {
-        const res = await fetch(`/api/profiles/codeforces/${encodeURIComponent(handle)}`);
-        const json = (await res.json()) as {
+        const json = await fetchJsonSafe<{
           handle?: string;
           rating?: number;
           maxRating?: number;
           rank?: string;
-          error?: string;
-        };
-        if (!res.ok) throw new Error(json.error || 'Codeforces sync failed');
+        }>(`/api/profiles/codeforces/${encodeURIComponent(handle)}`);
 
         const rankLabel = json.rank ? json.rank.charAt(0).toUpperCase() + json.rank.slice(1) : 'Rated';
         const statText = `${rankLabel} · ${json.rating || 0} Rating (Max ${json.maxRating || 0})`;
@@ -207,19 +205,16 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
         });
         setSyncMessage({ type: 'ok', text: `Synced Codeforces stats for ${json.handle || handle}.` });
       } else if (acc.platform === 'leetcode') {
-        const res = await fetch('/api/profiles/leetcode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: handle }),
-        });
-        const json = (await res.json()) as {
+        const json = await fetchJsonSafe<{
           username?: string;
           totalSolved?: number;
           mediumSolved?: number;
           hardSolved?: number;
-          error?: string;
-        };
-        if (!res.ok) throw new Error(json.error || 'LeetCode sync failed');
+        }>('/api/profiles/leetcode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: handle }),
+        });
 
         const statText = `${json.totalSolved ?? 0} Solved (${json.mediumSolved ?? 0} Med · ${json.hardSolved ?? 0} Hard)`;
         updateAccount(acc.id, {
@@ -264,7 +259,7 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
     setRefiningKey('summary');
     setSyncMessage(null);
     try {
-      const res = await fetch('/api/ai/refine', {
+      const json = await fetchJsonSafe<{ summary?: string; portfolioTagline?: string }>('/api/ai/refine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,8 +274,6 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           },
         }),
       });
-      const json = (await res.json()) as { summary?: string; portfolioTagline?: string; error?: string };
-      if (!res.ok) throw new Error(json.error || 'AI polish failed');
       updateProfile({
         summary: json.summary || data.profile.summary,
         portfolioTagline: json.portfolioTagline || data.profile.portfolioTagline,
@@ -297,7 +290,7 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
     setRefiningKey(project.id);
     setSyncMessage(null);
     try {
-      const res = await fetch('/api/ai/refine', {
+      const json = await fetchJsonSafe<{ summary?: string; highlights?: string[] }>('/api/ai/refine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -306,8 +299,6 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           content: project,
         }),
       });
-      const json = (await res.json()) as { summary?: string; highlights?: string[]; error?: string };
-      if (!res.ok) throw new Error(json.error || 'AI project polish failed');
       onChange({
         ...data,
         projects: data.projects.map((p) =>
