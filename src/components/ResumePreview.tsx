@@ -1,11 +1,15 @@
+'use client';
+
 import React from 'react';
-import { AccentColor, PortfolioData, ResumeTemplate } from '../types/portfolio';
+import { AccentColor, FontStyleId, PortfolioData, ResumeTemplate } from '../types/portfolio';
 import { sanitizeUrl } from '../utils/exportHtml';
+import { getFontConfig } from '../utils/themeStyles';
 
 interface ResumePreviewProps {
   data: PortfolioData;
   template: ResumeTemplate;
   accentColor?: AccentColor;
+  fontStyle?: FontStyleId;
 }
 
 const ACCENT_LINK_MAP: Record<AccentColor, string> = {
@@ -20,15 +24,20 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
   data,
   template,
   accentColor = 'blue',
+  fontStyle = 'jakarta',
 }) => {
   const { profile, accounts, education, projects, experience, skills, achievements, customSections = [] } = data;
   const activeAccounts = accounts.filter((a) => a.enabled && (a.username.trim() || a.url.trim()));
   const showPhoto = profile.showPhotoOnResume && Boolean(profile.photoDataUrl);
   const accentText = ACCENT_LINK_MAP[accentColor] || ACCENT_LINK_MAP.blue;
+  const fontCfg = getFontConfig(fontStyle);
 
   if (template === 'modern') {
     return (
-      <div className="print-only-sheet bg-white text-slate-900 w-full max-w-[820px] mx-auto border border-slate-200 shadow-sm rounded-lg overflow-hidden">
+      <div
+        className="print-only-sheet bg-white text-slate-900 w-full max-w-[820px] mx-auto border border-slate-200 shadow-sm rounded-lg overflow-hidden"
+        style={{ fontFamily: fontCfg.bodyStack }}
+      >
         <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] min-h-[1040px]">
           {/* Left Structural Column */}
           <aside className="bg-slate-50 border-r border-slate-200 p-7 space-y-6">
@@ -118,7 +127,10 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
           {/* Main Right Content */}
           <main className="p-8 space-y-6">
             <header className="pb-5 border-b border-slate-200">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              <h1
+                className="text-2xl font-bold tracking-tight text-slate-900"
+                style={{ fontFamily: fontCfg.headingStack }}
+              >
                 {profile.fullName || 'Your Name'}
               </h1>
               {profile.headline && <p className={`text-sm font-medium mt-1 ${accentText}`}>{profile.headline}</p>}
@@ -234,11 +246,17 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
 
   // Classic ATS Editorial Single-Column Template
   return (
-    <div className="print-only-sheet bg-white text-slate-900 w-full max-w-[820px] mx-auto border border-slate-200 shadow-sm rounded-lg p-9 md:p-11 space-y-5 min-h-[1040px]">
+    <div
+      className="print-only-sheet bg-white text-slate-900 w-full max-w-[820px] mx-auto border border-slate-200 shadow-sm rounded-lg p-9 md:p-11 space-y-5 min-h-[1040px]"
+      style={{ fontFamily: fontCfg.bodyStack }}
+    >
       {/* Header */}
       <header className="flex items-start justify-between gap-6 pb-4 border-b border-slate-300">
         <div className="space-y-1.5 flex-1">
-          <h1 className="font-editorial text-3xl font-bold tracking-tight text-slate-900">
+          <h1
+            className="text-3xl font-bold tracking-tight text-slate-900"
+            style={{ fontFamily: fontCfg.headingStack }}
+          >
             {profile.fullName || 'Your Full Name'}
           </h1>
           {profile.headline && <p className="text-sm font-medium text-slate-700">{profile.headline}</p>}

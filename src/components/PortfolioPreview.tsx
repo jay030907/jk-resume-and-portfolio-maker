@@ -1,13 +1,26 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import { ArrowUpRight, Mail, X } from 'lucide-react';
-import { AccentColor, PortfolioData, PortfolioTheme, ProjectItem } from '../types/portfolio';
+import {
+  AccentColor,
+  FontStyleId,
+  PortfolioData,
+  PortfolioTheme,
+  ProjectItem,
+  WallpaperPreset,
+} from '../types/portfolio';
 import { PlatformIcon } from './PlatformIcon';
 import { sanitizeUrl } from '../utils/exportHtml';
+import { getFontConfig, getPortfolioWallpaperStyle } from '../utils/themeStyles';
 
 interface PortfolioPreviewProps {
   data: PortfolioData;
   theme: PortfolioTheme;
   accentColor?: AccentColor;
+  wallpaper?: WallpaperPreset;
+  customWallpaperUrl?: string;
+  fontStyle?: FontStyleId;
 }
 
 const LIGHT_ACCENT_BTN: Record<AccentColor, string> = {
@@ -30,6 +43,9 @@ export const PortfolioPreview: React.FC<PortfolioPreviewProps> = ({
   data,
   theme,
   accentColor = 'blue',
+  wallpaper = 'clean',
+  customWallpaperUrl,
+  fontStyle = 'jakarta',
 }) => {
   const { profile, accounts, projects, experience, education, skills, achievements, customSections = [] } = data;
   const activeAccounts = accounts.filter((a) => a.enabled && (a.username.trim() || a.url.trim()));
@@ -53,10 +69,10 @@ export const PortfolioPreview: React.FC<PortfolioPreviewProps> = ({
       : 'bg-white text-slate-900 border-slate-200';
 
   const surfaceClass = isDark
-    ? 'bg-[#111114] border-zinc-800'
+    ? 'bg-[#111114]/90 border-zinc-800 backdrop-blur-[2px]'
     : isPaper
-      ? 'bg-[#F3EFEA] border-stone-200'
-      : 'bg-slate-50 border-slate-200';
+      ? 'bg-[#F3EFEA]/90 border-stone-200 backdrop-blur-[2px]'
+      : 'bg-slate-50/90 border-slate-200 backdrop-blur-[2px]';
 
   const borderClass = isDark ? 'border-zinc-800' : isPaper ? 'border-stone-200' : 'border-slate-200';
   const mutedClass = isDark ? 'text-zinc-400' : isPaper ? 'text-stone-600' : 'text-slate-600';
@@ -65,11 +81,20 @@ export const PortfolioPreview: React.FC<PortfolioPreviewProps> = ({
     ? 'bg-zinc-100 text-zinc-950 hover:bg-white'
     : LIGHT_ACCENT_BTN[accentColor];
 
+  const fontCfg = getFontConfig(fontStyle);
+  const wallpaperStyle = getPortfolioWallpaperStyle(theme, wallpaper, customWallpaperUrl, accentColor);
+
   return (
-    <div className={`w-full max-w-[1120px] mx-auto border rounded-xl overflow-hidden shadow-sm ${shellClass}`}>
+    <div
+      className={`w-full max-w-[1120px] mx-auto border rounded-xl overflow-hidden shadow-sm ${shellClass}`}
+      style={{ ...wallpaperStyle, fontFamily: fontCfg.bodyStack }}
+    >
       {/* 3-Zone Top Bar Contract */}
       <header className={`flex items-center justify-between gap-8 px-6 md:px-10 py-5 border-b ${borderClass}`}>
-        <span className="text-lg font-bold tracking-tight whitespace-nowrap shrink-0">
+        <span
+          className="text-lg font-bold tracking-tight whitespace-nowrap shrink-0"
+          style={{ fontFamily: fontCfg.headingStack }}
+        >
           {profile.fullName || 'Developer Portfolio'}
         </span>
 
@@ -107,7 +132,7 @@ export const PortfolioPreview: React.FC<PortfolioPreviewProps> = ({
 
           <h1
             className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]"
-            style={{ textWrap: 'balance' }}
+            style={{ textWrap: 'balance', fontFamily: fontCfg.headingStack }}
           >
             {profile.portfolioTagline ||
               profile.headline ||
@@ -116,7 +141,7 @@ export const PortfolioPreview: React.FC<PortfolioPreviewProps> = ({
 
           <p className={`text-base leading-relaxed max-w-2xl ${mutedClass}`}>
             {profile.summary ||
-              'Add your background, projects, and linked coding platforms in the builder or let AI Mode write your story.'}
+              'Add your background, projects, and linked coding platforms in the editor to build your personal portfolio.'}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">

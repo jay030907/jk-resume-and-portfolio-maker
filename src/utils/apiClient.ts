@@ -16,9 +16,7 @@ export async function fetchJsonSafe<T>(input: RequestInfo | URL, init?: RequestI
       throw new Error(parsed.error);
     }
     if (res.status === 404) {
-      throw new Error(
-        'API route was not found on this deployment. Ensure the /api serverless handler is deployed and GEMINI_API_KEY is configured in Environment Variables.'
-      );
+      throw new Error('Requested API route was not found on this deployment.');
     }
     throw new Error(
       rawText && rawText.length < 180
@@ -28,9 +26,7 @@ export async function fetchJsonSafe<T>(input: RequestInfo | URL, init?: RequestI
   }
 
   if (!parsed) {
-    throw new Error(
-      'Received a non-JSON response from the backend API. Ensure /api routes are active and GEMINI_API_KEY is configured.'
-    );
+    throw new Error('Received a non-JSON response from the server.');
   }
 
   return parsed;

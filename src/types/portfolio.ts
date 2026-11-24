@@ -99,6 +99,21 @@ export interface PersonalProfile {
 export type ResumeTemplate = 'classic' | 'modern';
 export type PortfolioTheme = 'editorial' | 'monograph' | 'paper';
 export type AccentColor = 'blue' | 'emerald' | 'rose' | 'amber' | 'slate';
+export type WallpaperPreset =
+  | 'clean'
+  | 'blueprint'
+  | 'studio-gradient'
+  | 'contour'
+  | 'warm-linen'
+  | 'obsidian-mesh'
+  | 'custom';
+export type FontStyleId =
+  | 'jakarta'
+  | 'serif'
+  | 'playfair'
+  | 'outfit'
+  | 'manrope'
+  | 'mono';
 
 export interface PortfolioData {
   profile: PersonalProfile;
@@ -109,14 +124,6 @@ export interface PortfolioData {
   skills: SkillGroup[];
   achievements: AchievementItem[];
   customSections?: CustomSection[];
-}
-
-export interface AIGenerationInput {
-  rawNotes: string;
-  targetRole: string;
-  tone: 'ATS Concise' | 'Storytelling & Builder' | 'Competitive & Technical';
-  jobDescription: string;
-  includeCodingStats: boolean;
 }
 
 export interface GitHubSyncedRepo {
@@ -149,30 +156,8 @@ export interface UIPreferences {
   resumeTemplate: ResumeTemplate;
   portfolioTheme: PortfolioTheme;
   showPhotoOnResume: boolean;
-  accentColor?: AccentColor;
-}
-
-export interface WorkspaceSnapshot {
-  data: PortfolioData;
-  ui: UIPreferences;
-}
-
-export interface AIChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  changesSummary?: string[];
-  snapshotBefore?: WorkspaceSnapshot;
-  undone?: boolean;
-  status?: 'ok' | 'error';
-  timestamp: string;
-}
-
-export interface AIInstructResponse {
-  reply: string;
-  changesSummary: string[];
-  portfolioData: Omit<PortfolioData, 'profile'> & {
-    profile: Omit<PersonalProfile, 'photoDataUrl'>;
-  };
-  uiPreferences: UIPreferences;
+  accentColor: AccentColor;
+  wallpaper: WallpaperPreset;
+  customWallpaperUrl?: string;
+  fontStyle: FontStyleId;
 }

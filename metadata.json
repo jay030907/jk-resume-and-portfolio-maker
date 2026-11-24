@@ -1,6 +1,6 @@
 {
   "name": "FolioForge",
-  "description": "Smart resume and portfolio builder for beginners with linked coding accounts and AI generation.",
+  "description": "Resume and portfolio builder for beginners with linked coding accounts, live stats sync, and instant exports.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

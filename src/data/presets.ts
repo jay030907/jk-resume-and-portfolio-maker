@@ -1,4 +1,11 @@
-import { PlatformId, PortfolioData } from '../types/portfolio';
+import {
+  AccentColor,
+  FontStyleId,
+  PlatformId,
+  PortfolioData,
+  UIPreferences,
+  WallpaperPreset,
+} from '../types/portfolio';
 
 export interface PlatformMeta {
   id: PlatformId;
@@ -8,6 +15,142 @@ export interface PlatformMeta {
   buildUrl: (handle: string) => string;
   supportsSync?: boolean;
 }
+
+export interface FontStyleOption {
+  id: FontStyleId;
+  label: string;
+  description: string;
+  headingStack: string;
+  bodyStack: string;
+  sampleText: string;
+}
+
+export interface WallpaperOption {
+  id: Exclude<WallpaperPreset, 'custom'>;
+  label: string;
+  description: string;
+  previewSwatch: string;
+}
+
+export interface AccentOption {
+  id: AccentColor;
+  label: string;
+  swatchClass: string;
+}
+
+export const FONT_STYLE_OPTIONS: FontStyleOption[] = [
+  {
+    id: 'jakarta',
+    label: 'Modern Sans',
+    description: 'Plus Jakarta Sans',
+    headingStack: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    bodyStack: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    sampleText: 'Aa Bb · Clean Geometric',
+  },
+  {
+    id: 'serif',
+    label: 'Editorial Serif',
+    description: 'Source Serif 4',
+    headingStack: '"Source Serif 4", Georgia, Cambria, serif',
+    bodyStack: '"Source Serif 4", Georgia, Cambria, serif',
+    sampleText: 'Aa Bb · Classic Book',
+  },
+  {
+    id: 'playfair',
+    label: 'Literary Display',
+    description: 'Playfair Display + Sans',
+    headingStack: '"Playfair Display", Georgia, serif',
+    bodyStack: '"Plus Jakarta Sans", -apple-system, sans-serif',
+    sampleText: 'Aa Bb · High-Contrast',
+  },
+  {
+    id: 'outfit',
+    label: 'Studio Geometric',
+    description: 'Outfit',
+    headingStack: '"Outfit", -apple-system, sans-serif',
+    bodyStack: '"Outfit", -apple-system, sans-serif',
+    sampleText: 'Aa Bb · Crisp Display',
+  },
+  {
+    id: 'manrope',
+    label: 'Humanist Sans',
+    description: 'Manrope',
+    headingStack: '"Manrope", -apple-system, sans-serif',
+    bodyStack: '"Manrope", -apple-system, sans-serif',
+    sampleText: 'Aa Bb · Balanced Warmth',
+  },
+  {
+    id: 'mono',
+    label: 'Technical Mono',
+    description: 'JetBrains Mono',
+    headingStack: '"JetBrains Mono", ui-monospace, monospace',
+    bodyStack: '"JetBrains Mono", ui-monospace, monospace',
+    sampleText: 'Aa Bb · Developer Mono',
+  },
+];
+
+export const WALLPAPER_OPTIONS: WallpaperOption[] = [
+  {
+    id: 'clean',
+    label: 'Clean Canvas',
+    description: 'Pure minimal surface',
+    previewSwatch: 'linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)',
+  },
+  {
+    id: 'blueprint',
+    label: 'Blueprint Grid',
+    description: 'Architectural hairline grid',
+    previewSwatch:
+      'linear-gradient(to right, rgba(37,99,235,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(37,99,235,0.14) 1px, transparent 1px), #f8fafc',
+  },
+  {
+    id: 'studio-gradient',
+    label: 'Studio Horizon',
+    description: 'Soft atmospheric studio glow',
+    previewSwatch:
+      'radial-gradient(circle at 20% 20%, rgba(59,130,246,0.22), transparent 55%), radial-gradient(circle at 80% 80%, rgba(14,165,233,0.16), transparent 55%), #ffffff',
+  },
+  {
+    id: 'contour',
+    label: 'Dot Matrix',
+    description: 'Precision studio dot pattern',
+    previewSwatch:
+      'radial-gradient(rgba(15,23,42,0.22) 1.2px, transparent 1.2px), #f8fafc',
+  },
+  {
+    id: 'warm-linen',
+    label: 'Woven Paper',
+    description: 'Fine diagonal editorial texture',
+    previewSwatch:
+      'repeating-linear-gradient(45deg, rgba(120,113,108,0.08) 0px, rgba(120,113,108,0.08) 1px, transparent 1px, transparent 8px), #faf8f5',
+  },
+  {
+    id: 'obsidian-mesh',
+    label: 'Aurora Mesh',
+    description: 'Layered multi-tone depth wash',
+    previewSwatch:
+      'radial-gradient(circle at 15% 15%, rgba(16,185,129,0.22), transparent 48%), radial-gradient(circle at 85% 25%, rgba(59,130,246,0.24), transparent 50%), #0f172a',
+  },
+];
+
+export const ACCENT_OPTIONS: AccentOption[] = [
+  { id: 'blue', label: 'Cobalt Blue', swatchClass: 'bg-blue-600' },
+  { id: 'emerald', label: 'Emerald', swatchClass: 'bg-emerald-600' },
+  { id: 'rose', label: 'Crimson Rose', swatchClass: 'bg-rose-600' },
+  { id: 'amber', label: 'Amber Gold', swatchClass: 'bg-amber-600' },
+  { id: 'slate', label: 'Obsidian Slate', swatchClass: 'bg-slate-900' },
+];
+
+export const DEFAULT_UI_PREFERENCES: UIPreferences = {
+  previewMode: 'resume',
+  resumeTemplate: 'classic',
+  portfolioTheme: 'editorial',
+  showPhotoOnResume: true,
+  accentColor: 'blue',
+  wallpaper: 'clean',
+  customWallpaperUrl: '',
+  fontStyle: 'jakarta',
+};
 
 export const PLATFORM_CATALOG: PlatformMeta[] = [
   {
@@ -106,9 +249,9 @@ export const PLATFORM_CATALOG: PlatformMeta[] = [
   },
 ];
 
-export const SAMPLE_AVATAR_URL = '/src/assets/images/sample_beginner_avatar_1795496683529.jpg';
-export const SAMPLE_PROJECT_COVER_ONE = '/src/assets/images/portfolio_project_cover_one_1795496683853.jpg';
-export const SAMPLE_PROJECT_COVER_TWO = '/src/assets/images/portfolio_project_cover_two_1795496684065.jpg';
+export const SAMPLE_AVATAR_URL = '/images/sample_beginner_avatar_1795496683529.jpg';
+export const SAMPLE_PROJECT_COVER_ONE = '/images/portfolio_project_cover_one_1795496683853.jpg';
+export const SAMPLE_PROJECT_COVER_TWO = '/images/portfolio_project_cover_two_1795496684065.jpg';
 
 export const DEFAULT_PORTFOLIO_DATA: PortfolioData = {
   profile: {

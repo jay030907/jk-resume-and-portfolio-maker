@@ -1,14 +1,18 @@
+'use client';
+
 import React, { useRef, useState } from 'react';
 import {
   Plus,
   Trash2,
   Upload,
   RefreshCw,
-  Wand2,
   ExternalLink,
   Check,
   User,
   Download,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   PortfolioData,
@@ -19,26 +23,33 @@ import {
   ExperienceItem,
   SkillGroup,
   AchievementItem,
+  CustomSection,
   GitHubSyncResponse,
   GitHubSyncedRepo,
+  UIPreferences,
+  WallpaperPreset,
 } from '../types/portfolio';
 import {
+  ACCENT_OPTIONS,
+  FONT_STYLE_OPTIONS,
   PLATFORM_CATALOG,
   SAMPLE_AVATAR_URL,
   SAMPLE_PROJECT_COVER_ONE,
   SAMPLE_PROJECT_COVER_TWO,
+  WALLPAPER_OPTIONS,
 } from '../data/presets';
 import { PlatformIcon } from './PlatformIcon';
 import { fetchJsonSafe } from '../utils/apiClient';
 
-export type BuilderTab = 'identity' | 'links' | 'projects' | 'background';
+export type BuilderTab = 'identity' | 'links' | 'projects' | 'background' | 'style';
 
 interface BuilderSidebarProps {
   data: PortfolioData;
+  uiPreferences: UIPreferences;
   onChange: (next: PortfolioData) => void;
+  onUiChange: (next: UIPreferences) => void;
   activeTab: BuilderTab;
   onTabChange: (tab: BuilderTab) => void;
-  targetRole: string;
 }
 
 function resizeImageToDataUrl(file: File, maxSize = 480): Promise<string> {
@@ -69,18 +80,20 @@ function resizeImageToDataUrl(file: File, maxSize = 480): Promise<string> {
 
 export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
   data,
+  uiPreferences,
   onChange,
+  onUiChange,
   activeTab,
   onTabChange,
-  targetRole,
 }) => {
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const wallpaperInputRef = useRef<HTMLInputElement>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [githubRepos, setGithubRepos] = useState<GitHubSyncedRepo[]>([]);
-  const [refiningKey, setRefiningKey] = useState<string | null>(null);
   const [newPlatform, setNewPlatform] = useState<PlatformId>('codeforces');
   const [customPlatformName, setCustomPlatformName] = useState('');
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
 
   const updateProfile = (patch: Partial<PortfolioData['profile']>) => {
     onChange({ ...data, profile: { ...data.profile, ...patch } });
@@ -106,14 +119,40 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
   };
 
   const handleProjectCoverUpload = async (projectId: string, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setSyncMessage({ type: 'err', text: 'Please upload a PNG, JPG, or WebP screenshot.' });
+      return;
+    }
     try {
-      const dataUrl = await resizeImageToDataUrl(file, 840);
+      const dataUrl = await resizeImageToDataUrl(file, 900);
       onChange({
         ...data,
         projects: data.projects.map((p) => (p.id === projectId ? { ...p, coverImage: dataUrl } : p)),
       });
+      setSyncMessage({ type: 'ok', text: 'Project screenshot uploaded.' });
     } catch {
       setSyncMessage({ type: 'err', text: 'Could not process project image.' });
+    }
+  };
+
+  const handleCustomWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setSyncMessage({ type: 'err', text: 'Please upload a PNG, JPG, or WebP wallpaper image.' });
+      return;
+    }
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 1600);
+      onUiChange({
+        ...uiPreferences,
+        wallpaper: 'custom',
+        customWallpaperUrl: dataUrl,
+        previewMode: 'portfolio',
+      });
+      setSyncMessage({ type: 'ok', text: 'Custom background wallpaper applied to portfolio.' });
+    } catch {
+      setSyncMessage({ type: 'err', text: 'Could not process wallpaper image.' });
     }
   };
 
@@ -123,11 +162,14 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
       accounts: data.accounts.map((acc) => {
         if (acc.id !== id) return acc;
         const next = { ...acc, ...patch };
-        // Auto-build URL when username changes and URL matches default pattern or is empty
         if (patch.username !== undefined) {
           const meta = PLATFORM_CATALOG.find((m) => m.id === acc.platform);
           const cleanHandle = patch.username.trim().replace(/^@/, '');
-          if (meta && cleanHandle && (!acc.url || acc.url === meta.buildUrl(acc.username.trim().replace(/^@/, '')))) {
+          if (
+            meta &&
+            cleanHandle &&
+            (!acc.url || acc.url === meta.buildUrl(acc.username.trim().replace(/^@/, '')))
+          ) {
             next.url = meta.buildUrl(cleanHandle);
           }
         }
@@ -138,7 +180,8 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
 
   const addAccount = () => {
     const meta = PLATFORM_CATALOG.find((m) => m.id === newPlatform);
-    const label = newPlatform === 'custom' ? customPlatformName.trim() || 'Custom Link' : meta?.name || 'Platform';
+    const label =
+      newPlatform === 'custom' ? customPlatformName.trim() || 'Custom Link' : meta?.name || 'Platform';
     const nextAcc: LinkedAccount = {
       id: `acc-${Date.now()}`,
       platform: newPlatform,
@@ -186,7 +229,7 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
         setGithubRepos(json.repos || []);
         setSyncMessage({
           type: 'ok',
-          text: `Synced @${json.username} (${json.publicRepos} repos). You can import repositories in the Projects tab.`,
+          text: `Synced @${json.username} (${json.repos.length} repositories ready in Projects tab).`,
         });
       } else if (acc.platform === 'codeforces') {
         const json = await fetchJsonSafe<{
@@ -196,7 +239,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           rank?: string;
         }>(`/api/profiles/codeforces/${encodeURIComponent(handle)}`);
 
-        const rankLabel = json.rank ? json.rank.charAt(0).toUpperCase() + json.rank.slice(1) : 'Rated';
+        const rankLabel = json.rank
+          ? json.rank.charAt(0).toUpperCase() + json.rank.slice(1)
+          : 'Rated';
         const statText = `${rankLabel} · ${json.rating || 0} Rating (Max ${json.maxRating || 0})`;
         updateAccount(acc.id, {
           username: json.handle || handle,
@@ -234,95 +279,48 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
     }
   };
 
+  const buildProjectFromRepo = (repo: GitHubSyncedRepo, indexOffset: number): ProjectItem => ({
+    id: `proj-${Date.now()}-${indexOffset}-${Math.random().toString(36).slice(2, 6)}`,
+    title: repo.name,
+    role: 'Creator',
+    techStack: [repo.language, ...repo.topics].filter(Boolean).slice(0, 6),
+    liveUrl: repo.homepage || '',
+    repoUrl: repo.htmlUrl,
+    coverImage:
+      (data.projects.length + indexOffset) % 2 === 0
+        ? SAMPLE_PROJECT_COVER_ONE
+        : SAMPLE_PROJECT_COVER_TWO,
+    summary:
+      repo.description ||
+      `Open-source project built with ${repo.language || 'modern web technologies'}.`,
+    highlights: [
+      repo.description || `Engineered ${repo.name} and published source code on GitHub.`,
+      repo.stars > 0
+        ? `Earned ${repo.stars} stars from the developer community.`
+        : 'Structured modular repository with clean documentation.',
+    ],
+  });
+
   const importGithubRepoAsProject = (repo: GitHubSyncedRepo) => {
-    const exists = data.projects.some((p) => p.repoUrl === repo.htmlUrl);
-    if (exists) return;
-    const newProject: ProjectItem = {
-      id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: repo.name,
-      role: 'Creator',
-      techStack: [repo.language, ...repo.topics].filter(Boolean).slice(0, 5),
-      liveUrl: repo.homepage || '',
-      repoUrl: repo.htmlUrl,
-      coverImage: data.projects.length % 2 === 0 ? SAMPLE_PROJECT_COVER_ONE : SAMPLE_PROJECT_COVER_TWO,
-      summary: repo.description || `Open-source project built with ${repo.language || 'modern web technologies'}.`,
-      highlights: [
-        repo.description || `Engineered ${repo.name} and published source code on GitHub.`,
-        repo.stars > 0 ? `Earned ${repo.stars} stars from the developer community.` : 'Structured modular repository with clean documentation.',
-      ],
-    };
+    if (data.projects.some((p) => p.repoUrl === repo.htmlUrl)) return;
+    const newProject = buildProjectFromRepo(repo, 0);
     onChange({ ...data, projects: [...data.projects, newProject] });
     setSyncMessage({ type: 'ok', text: `Imported "${repo.name}" into Projects.` });
   };
 
-  const refineSummaryWithAI = async () => {
-    setRefiningKey('summary');
-    setSyncMessage(null);
-    try {
-      const json = await fetchJsonSafe<{ summary?: string; portfolioTagline?: string }>('/api/ai/refine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: 'summary',
-          targetRole,
-          content: {
-            fullName: data.profile.fullName,
-            headline: data.profile.headline,
-            summary: data.profile.summary,
-            skills: data.skills,
-            accounts: data.accounts.filter((a) => a.enabled && a.username).map((a) => `${a.label}: ${a.statText || a.username}`),
-          },
-        }),
-      });
-      updateProfile({
-        summary: json.summary || data.profile.summary,
-        portfolioTagline: json.portfolioTagline || data.profile.portfolioTagline,
-      });
-      setSyncMessage({ type: 'ok', text: 'Polished summary & portfolio tagline with AI.' });
-    } catch (err) {
-      setSyncMessage({ type: 'err', text: err instanceof Error ? err.message : 'AI polish failed' });
-    } finally {
-      setRefiningKey(null);
-    }
-  };
-
-  const refineProjectWithAI = async (project: ProjectItem) => {
-    setRefiningKey(project.id);
-    setSyncMessage(null);
-    try {
-      const json = await fetchJsonSafe<{ summary?: string; highlights?: string[] }>('/api/ai/refine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: 'project',
-          targetRole,
-          content: project,
-        }),
-      });
-      onChange({
-        ...data,
-        projects: data.projects.map((p) =>
-          p.id === project.id
-            ? {
-                ...p,
-                summary: json.summary || p.summary,
-                highlights: json.highlights && json.highlights.length > 0 ? json.highlights : p.highlights,
-              }
-            : p
-        ),
-      });
-      setSyncMessage({ type: 'ok', text: `Polished "${project.title}" bullets with AI.` });
-    } catch (err) {
-      setSyncMessage({ type: 'err', text: err instanceof Error ? err.message : 'AI polish failed' });
-    } finally {
-      setRefiningKey(null);
-    }
+  const importAllGithubRepos = () => {
+    const existingUrls = new Set(data.projects.map((p) => p.repoUrl));
+    const toImport = githubRepos.filter((r) => !existingUrls.has(r.htmlUrl));
+    if (toImport.length === 0) return;
+    const newProjects = toImport.map((repo, i) => buildProjectFromRepo(repo, i));
+    onChange({ ...data, projects: [...data.projects, ...newProjects] });
+    setSyncMessage({ type: 'ok', text: `Imported ${newProjects.length} repositories into Projects.` });
   };
 
   const addProject = () => {
     const newProj: ProjectItem = {
-      id: `proj-${Date.now()}`,
-      title: 'New Project',
+      id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: `Project ${data.projects.length + 1}`,
       role: 'Developer',
       techStack: ['React', 'TypeScript'],
       liveUrl: '',
@@ -381,24 +379,47 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
     onChange({ ...data, achievements: [...data.achievements, next] });
   };
 
+  const addCustomSection = () => {
+    const next: CustomSection = {
+      id: `sec-${Date.now()}`,
+      title: 'Certifications & Languages',
+      entries: [{ heading: '', subheading: '', detail: '' }],
+    };
+    onChange({ ...data, customSections: [...(data.customSections || []), next] });
+  };
+
+  const customSections = data.customSections || [];
+  const allProjectsCollapsed =
+    data.projects.length > 0 && data.projects.every((p) => collapsedProjects[p.id]);
+
+  const toggleAllProjects = () => {
+    const nextState: Record<string, boolean> = {};
+    const target = !allProjectsCollapsed;
+    for (const p of data.projects) {
+      nextState[p.id] = target;
+    }
+    setCollapsedProjects(nextState);
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Sub-navigation segmented tabs */}
       <div className="px-4 pt-4 pb-3 border-b border-slate-200 bg-white">
-        <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-lg">
+        <div className="grid grid-cols-5 gap-1 p-1 bg-slate-100 rounded-lg">
           {(
             [
               { id: 'identity', label: 'Identity' },
               { id: 'links', label: 'Accounts' },
               { id: 'projects', label: 'Projects' },
               { id: 'background', label: 'Resume' },
+              { id: 'style', label: 'Style' },
             ] as const
           ).map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => onTabChange(tab.id)}
-              className={`px-2 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`px-1.5 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -423,15 +444,16 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           <button
             type="button"
             onClick={() => setSyncMessage(null)}
-            className="text-current opacity-70 hover:opacity-100 font-medium cursor-pointer"
+            className="text-current opacity-60 hover:opacity-100 font-semibold cursor-pointer"
           >
-            Dismiss
+            ✕
           </button>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* TAB 1: IDENTITY & PROFILE PHOTO */}
+      {/* Scrollable Editor Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {/* TAB 1: IDENTITY & PHOTO */}
         {activeTab === 'identity' && (
           <div className="space-y-5">
             {/* Profile Photo Upload */}
@@ -442,7 +464,11 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                   <input
                     type="checkbox"
                     checked={data.profile.showPhotoOnResume}
-                    onChange={(e) => updateProfile({ showPhotoOnResume: e.target.checked })}
+                    onChange={(e) => {
+                      const nextVal = e.target.checked;
+                      updateProfile({ showPhotoOnResume: nextVal });
+                      onUiChange({ ...uiPreferences, showPhotoOnResume: nextVal });
+                    }}
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   Show on Resume
@@ -519,7 +545,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Headline / Target Role</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Headline / Target Role
+                  </label>
                   <input
                     type="text"
                     value={data.profile.headline}
@@ -577,20 +605,13 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
 
             {/* Bio & Portfolio Tagline */}
             <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between gap-2">
+              <div>
                 <h3 className="text-sm font-semibold text-slate-900">Summary & Tagline</h3>
-                <button
-                  type="button"
-                  disabled={refiningKey === 'summary'}
-                  onClick={refineSummaryWithAI}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:opacity-50 cursor-pointer"
-                >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  {refiningKey === 'summary' ? 'Polishing...' : 'AI Polish'}
-                </button>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Portfolio Hero Tagline</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Portfolio Hero Tagline
+                </label>
                 <input
                   type="text"
                   value={data.profile.portfolioTagline}
@@ -600,7 +621,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Professional Summary (Resume & About)</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Professional Summary (Resume & About)
+                </label>
                 <textarea
                   rows={4}
                   value={data.profile.summary}
@@ -704,7 +727,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-600 mb-1">Username / Handle</label>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Username / Handle
+                      </label>
                       <input
                         type="text"
                         value={acc.username}
@@ -714,7 +739,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-600 mb-1">Highlight / Stats</label>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Highlight / Stats
+                      </label>
                       <input
                         type="text"
                         value={acc.statText}
@@ -753,16 +780,30 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
           </div>
         )}
 
-        {/* TAB 3: PROJECTS & GITHUB IMPORT */}
+        {/* TAB 3: UNLIMITED PROJECTS & GITHUB IMPORT */}
         {activeTab === 'projects' && (
           <div className="space-y-4">
             {githubRepos.length > 0 && (
               <div className="p-4 bg-white border border-blue-200 rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-slate-900">Import from Synced GitHub Repositories</h3>
-                  <span className="text-[11px] text-slate-500 tabular-nums">{githubRepos.length} found</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-900">
+                      Import from Synced GitHub Repositories
+                    </h3>
+                    <span className="text-[11px] text-slate-500 tabular-nums">
+                      {githubRepos.length} repositories available · no import cap
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={importAllGithubRepos}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    Import All
+                  </button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                   {githubRepos.map((repo) => {
                     const alreadyAdded = data.projects.some((p) => p.repoUrl === repo.htmlUrl);
                     return (
@@ -773,7 +814,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                         <div className="min-w-0">
                           <div className="text-xs font-medium text-slate-900 truncate">{repo.name}</div>
                           <div className="text-[11px] text-slate-500 truncate">
-                            {[repo.language, repo.stars > 0 ? `${repo.stars} stars` : ''].filter(Boolean).join(' · ') || 'Repository'}
+                            {[repo.language, repo.stars > 0 ? `${repo.stars} stars` : '']
+                              .filter(Boolean)
+                              .join(' · ') || 'Repository'}
                           </div>
                         </div>
                         <button
@@ -801,205 +844,274 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">Projects ({data.projects.length})</h3>
-              <button
-                type="button"
-                onClick={addProject}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Project
-              </button>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 tabular-nums">
+                  Projects ({data.projects.length})
+                </h3>
+                <p className="text-[11px] text-slate-500">Add as many projects and screenshots as you like.</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {data.projects.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={toggleAllProjects}
+                    className="px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    {allProjectsCollapsed ? 'Expand All' : 'Collapse All'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={addProject}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Project
+                </button>
+              </div>
             </div>
 
             {data.projects.length === 0 && (
               <div className="p-6 bg-white border border-slate-200 rounded-xl text-center space-y-2">
                 <p className="text-sm font-medium text-slate-900">No projects added yet</p>
                 <p className="text-xs text-slate-500">
-                  Add a personal or coursework project, or sync your GitHub in the Accounts tab to import repos.
+                  Add personal or coursework projects above, or sync your GitHub in Accounts to import repos.
                 </p>
               </div>
             )}
 
-            {data.projects.map((proj, idx) => (
-              <div key={proj.id} className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-500 tabular-nums">Project {idx + 1}</span>
-                  <div className="flex items-center gap-2">
+            {data.projects.map((proj, idx) => {
+              const isCollapsed = Boolean(collapsedProjects[proj.id]);
+              return (
+                <div key={proj.id} className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      disabled={refiningKey === proj.id}
-                      onClick={() => refineProjectWithAI(proj)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                      onClick={() =>
+                        setCollapsedProjects((prev) => ({ ...prev, [proj.id]: !prev[proj.id] }))
+                      }
+                      className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
                     >
-                      <Wand2 className="w-3 h-3" />
-                      {refiningKey === proj.id ? 'Polishing...' : 'AI Polish'}
+                      {isCollapsed ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      )}
+                      <span className="text-xs font-semibold text-slate-900 truncate">
+                        {idx + 1}. {proj.title || 'Untitled Project'}
+                      </span>
                     </button>
                     <button
                       type="button"
                       onClick={() =>
                         onChange({ ...data, projects: data.projects.filter((p) => p.id !== proj.id) })
                       }
-                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
                       aria-label="Delete project"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-600 mb-1">Project Title</label>
-                    <input
-                      type="text"
-                      value={proj.title}
-                      onChange={(e) =>
-                        onChange({
-                          ...data,
-                          projects: data.projects.map((p) => (p.id === proj.id ? { ...p, title: e.target.value } : p)),
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-600 mb-1">Your Role</label>
-                    <input
-                      type="text"
-                      value={proj.role}
-                      onChange={(e) =>
-                        onChange({
-                          ...data,
-                          projects: data.projects.map((p) => (p.id === proj.id ? { ...p, role: e.target.value } : p)),
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                </div>
+                  {!isCollapsed && (
+                    <div className="space-y-3 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            Project Title
+                          </label>
+                          <input
+                            type="text"
+                            value={proj.title}
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                projects: data.projects.map((p) =>
+                                  p.id === proj.id ? { ...p, title: e.target.value } : p
+                                ),
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            Your Role
+                          </label>
+                          <input
+                            type="text"
+                            value={proj.role}
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                projects: data.projects.map((p) =>
+                                  p.id === proj.id ? { ...p, role: e.target.value } : p
+                                ),
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                        </div>
+                      </div>
 
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 mb-1">Tech Stack (comma separated)</label>
-                  <input
-                    type="text"
-                    value={proj.techStack.join(', ')}
-                    onChange={(e) =>
-                      onChange({
-                        ...data,
-                        projects: data.projects.map((p) =>
-                          p.id === proj.id
-                            ? {
-                                ...p,
-                                techStack: e.target.value
-                                  .split(',')
-                                  .map((s) => s.trim())
-                                  .filter(Boolean),
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                          Tech Stack (comma separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={proj.techStack.join(', ')}
+                          onChange={(e) =>
+                            onChange({
+                              ...data,
+                              projects: data.projects.map((p) =>
+                                p.id === proj.id
+                                  ? {
+                                      ...p,
+                                      techStack: e.target.value
+                                        .split(',')
+                                        .map((s) => s.trim())
+                                        .filter(Boolean),
+                                    }
+                                  : p
+                              ),
+                            })
+                          }
+                          placeholder="React, TypeScript, Vercel"
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            Live URL (Vercel / Demo)
+                          </label>
+                          <input
+                            type="url"
+                            value={proj.liveUrl}
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                projects: data.projects.map((p) =>
+                                  p.id === proj.id ? { ...p, liveUrl: e.target.value } : p
+                                ),
+                              })
+                            }
+                            placeholder="https://myapp.vercel.app"
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            GitHub Repo URL
+                          </label>
+                          <input
+                            type="url"
+                            value={proj.repoUrl}
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                projects: data.projects.map((p) =>
+                                  p.id === proj.id ? { ...p, repoUrl: e.target.value } : p
+                                ),
+                              })
+                            }
+                            placeholder="https://github.com/user/repo"
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                          Portfolio Summary
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={proj.summary}
+                          onChange={(e) =>
+                            onChange({
+                              ...data,
+                              projects: data.projects.map((p) =>
+                                p.id === proj.id ? { ...p, summary: e.target.value } : p
+                              ),
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                          Resume Bullet Points (one per line)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={proj.highlights.join('\n')}
+                          onChange={(e) =>
+                            onChange({
+                              ...data,
+                              projects: data.projects.map((p) =>
+                                p.id === proj.id
+                                  ? {
+                                      ...p,
+                                      highlights: e.target.value
+                                        .split('\n')
+                                        .filter((line) => line.trim() !== ''),
+                                    }
+                                  : p
+                              ),
+                            })
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          Upload Project Screenshot
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleProjectCoverUpload(proj.id, file);
+                            }}
+                          />
+                        </label>
+                        {proj.coverImage && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-emerald-700">Cover ready</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onChange({
+                                  ...data,
+                                  projects: data.projects.map((p) =>
+                                    p.id === proj.id ? { ...p, coverImage: '' } : p
+                                  ),
+                                })
                               }
-                            : p
-                        ),
-                      })
-                    }
-                    placeholder="React, TypeScript, Vercel"
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-600 mb-1">Live URL (Vercel / Demo)</label>
-                    <input
-                      type="url"
-                      value={proj.liveUrl}
-                      onChange={(e) =>
-                        onChange({
-                          ...data,
-                          projects: data.projects.map((p) => (p.id === proj.id ? { ...p, liveUrl: e.target.value } : p)),
-                        })
-                      }
-                      placeholder="https://myapp.vercel.app"
-                      className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-600 mb-1">GitHub Repo URL</label>
-                    <input
-                      type="url"
-                      value={proj.repoUrl}
-                      onChange={(e) =>
-                        onChange({
-                          ...data,
-                          projects: data.projects.map((p) => (p.id === proj.id ? { ...p, repoUrl: e.target.value } : p)),
-                        })
-                      }
-                      placeholder="https://github.com/user/repo"
-                      className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 mb-1">Portfolio Summary</label>
-                  <textarea
-                    rows={2}
-                    value={proj.summary}
-                    onChange={(e) =>
-                      onChange({
-                        ...data,
-                        projects: data.projects.map((p) => (p.id === proj.id ? { ...p, summary: e.target.value } : p)),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-slate-600 mb-1">Resume Bullet Points (one per line)</label>
-                  <textarea
-                    rows={3}
-                    value={proj.highlights.join('\n')}
-                    onChange={(e) =>
-                      onChange({
-                        ...data,
-                        projects: data.projects.map((p) =>
-                          p.id === proj.id
-                            ? {
-                                ...p,
-                                highlights: e.target.value.split('\n').filter((line) => line.trim() !== ''),
-                              }
-                            : p
-                        ),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" />
-                    Upload Project Screenshot
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleProjectCoverUpload(proj.id, file);
-                      }}
-                    />
-                  </label>
-                  {proj.coverImage && (
-                    <span className="text-[11px] text-slate-500">Cover ready</span>
+                              className="text-[11px] text-slate-500 hover:text-rose-600 cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        {/* TAB 4: EDUCATION, EXPERIENCE, SKILLS & ACHIEVEMENTS */}
+        {/* TAB 4: EDUCATION, EXPERIENCE, SKILLS, ACHIEVEMENTS & CUSTOM SECTIONS */}
         {activeTab === 'background' && (
           <div className="space-y-6">
             {/* Education */}
@@ -1025,14 +1137,18 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          education: data.education.map((x) => (x.id === edu.id ? { ...x, institution: e.target.value } : x)),
+                          education: data.education.map((x) =>
+                            x.id === edu.id ? { ...x, institution: e.target.value } : x
+                          ),
                         })
                       }
                       className="flex-1 px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg"
                     />
                     <button
                       type="button"
-                      onClick={() => onChange({ ...data, education: data.education.filter((x) => x.id !== edu.id) })}
+                      onClick={() =>
+                        onChange({ ...data, education: data.education.filter((x) => x.id !== edu.id) })
+                      }
                       className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1045,7 +1161,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                     onChange={(e) =>
                       onChange({
                         ...data,
-                        education: data.education.map((x) => (x.id === edu.id ? { ...x, degree: e.target.value } : x)),
+                        education: data.education.map((x) =>
+                          x.id === edu.id ? { ...x, degree: e.target.value } : x
+                        ),
                       })
                     }
                     className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1058,7 +1176,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          education: data.education.map((x) => (x.id === edu.id ? { ...x, startYear: e.target.value } : x)),
+                          education: data.education.map((x) =>
+                            x.id === edu.id ? { ...x, startYear: e.target.value } : x
+                          ),
                         })
                       }
                       className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1070,7 +1190,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          education: data.education.map((x) => (x.id === edu.id ? { ...x, endYear: e.target.value } : x)),
+                          education: data.education.map((x) =>
+                            x.id === edu.id ? { ...x, endYear: e.target.value } : x
+                          ),
                         })
                       }
                       className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1082,7 +1204,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          education: data.education.map((x) => (x.id === edu.id ? { ...x, gpa: e.target.value } : x)),
+                          education: data.education.map((x) =>
+                            x.id === edu.id ? { ...x, gpa: e.target.value } : x
+                          ),
                         })
                       }
                       className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1095,7 +1219,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                     onChange={(e) =>
                       onChange({
                         ...data,
-                        education: data.education.map((x) => (x.id === edu.id ? { ...x, coursework: e.target.value } : x)),
+                        education: data.education.map((x) =>
+                          x.id === edu.id ? { ...x, coursework: e.target.value } : x
+                        ),
                       })
                     }
                     className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1127,14 +1253,21 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          experience: data.experience.map((x) => (x.id === exp.id ? { ...x, role: e.target.value } : x)),
+                          experience: data.experience.map((x) =>
+                            x.id === exp.id ? { ...x, role: e.target.value } : x
+                          ),
                         })
                       }
                       className="flex-1 px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg"
                     />
                     <button
                       type="button"
-                      onClick={() => onChange({ ...data, experience: data.experience.filter((x) => x.id !== exp.id) })}
+                      onClick={() =>
+                        onChange({
+                          ...data,
+                          experience: data.experience.filter((x) => x.id !== exp.id),
+                        })
+                      }
                       className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1162,7 +1295,9 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          experience: data.experience.map((x) => (x.id === exp.id ? { ...x, period: e.target.value } : x)),
+                          experience: data.experience.map((x) =>
+                            x.id === exp.id ? { ...x, period: e.target.value } : x
+                          ),
                         })
                       }
                       className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
@@ -1177,7 +1312,12 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                         ...data,
                         experience: data.experience.map((x) =>
                           x.id === exp.id
-                            ? { ...x, highlights: e.target.value.split('\n').filter((l) => l.trim() !== '') }
+                            ? {
+                                ...x,
+                                highlights: e.target.value
+                                  .split('\n')
+                                  .filter((l) => l.trim() !== ''),
+                              }
                             : x
                         ),
                       })
@@ -1211,14 +1351,18 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          skills: data.skills.map((s) => (s.id === grp.id ? { ...s, category: e.target.value } : s)),
+                          skills: data.skills.map((s) =>
+                            s.id === grp.id ? { ...s, category: e.target.value } : s
+                          ),
                         })
                       }
                       className="flex-1 px-2.5 py-1.5 text-xs font-medium border border-slate-200 rounded-lg"
                     />
                     <button
                       type="button"
-                      onClick={() => onChange({ ...data, skills: data.skills.filter((s) => s.id !== grp.id) })}
+                      onClick={() =>
+                        onChange({ ...data, skills: data.skills.filter((s) => s.id !== grp.id) })
+                      }
                       className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1282,7 +1426,12 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => onChange({ ...data, achievements: data.achievements.filter((a) => a.id !== ach.id) })}
+                      onClick={() =>
+                        onChange({
+                          ...data,
+                          achievements: data.achievements.filter((a) => a.id !== ach.id),
+                        })
+                      }
                       className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1335,6 +1484,370 @@ export const BuilderSidebar: React.FC<BuilderSidebarProps> = ({
                 </div>
               ))}
             </section>
+
+            {/* Custom Sections */}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Custom Sections</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Languages, Certifications, Volunteer Work, Publications
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addCustomSection}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-slate-900 text-white rounded-md hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Section
+                </button>
+              </div>
+
+              {customSections.map((sec) => (
+                <div key={sec.id} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={sec.title}
+                      placeholder="Section Title (e.g. Languages Spoken)"
+                      onChange={(e) =>
+                        onChange({
+                          ...data,
+                          customSections: customSections.map((s) =>
+                            s.id === sec.id ? { ...s, title: e.target.value } : s
+                          ),
+                        })
+                      }
+                      className="flex-1 px-2.5 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChange({
+                          ...data,
+                          customSections: customSections.filter((s) => s.id !== sec.id),
+                        })
+                      }
+                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                      aria-label="Remove section"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {sec.entries.map((entry, entryIdx) => (
+                      <div key={entryIdx} className="pt-2 border-t border-slate-100 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={entry.heading}
+                            placeholder="Heading (e.g. AWS Cloud Practitioner)"
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                customSections: customSections.map((s) =>
+                                  s.id === sec.id
+                                    ? {
+                                        ...s,
+                                        entries: s.entries.map((en, i) =>
+                                          i === entryIdx ? { ...en, heading: e.target.value } : en
+                                        ),
+                                      }
+                                    : s
+                                ),
+                              })
+                            }
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onChange({
+                                ...data,
+                                customSections: customSections.map((s) =>
+                                  s.id === sec.id
+                                    ? { ...s, entries: s.entries.filter((_, i) => i !== entryIdx) }
+                                    : s
+                                ),
+                              })
+                            }
+                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                            aria-label="Remove entry"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={entry.subheading}
+                            placeholder="Subtitle / Level / Year"
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                customSections: customSections.map((s) =>
+                                  s.id === sec.id
+                                    ? {
+                                        ...s,
+                                        entries: s.entries.map((en, i) =>
+                                          i === entryIdx ? { ...en, subheading: e.target.value } : en
+                                        ),
+                                      }
+                                    : s
+                                ),
+                              })
+                            }
+                            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                          <input
+                            type="text"
+                            value={entry.detail}
+                            placeholder="Short detail"
+                            onChange={(e) =>
+                              onChange({
+                                ...data,
+                                customSections: customSections.map((s) =>
+                                  s.id === sec.id
+                                    ? {
+                                        ...s,
+                                        entries: s.entries.map((en, i) =>
+                                          i === entryIdx ? { ...en, detail: e.target.value } : en
+                                        ),
+                                      }
+                                    : s
+                                ),
+                              })
+                            }
+                            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChange({
+                          ...data,
+                          customSections: customSections.map((s) =>
+                            s.id === sec.id
+                              ? {
+                                  ...s,
+                                  entries: [...s.entries, { heading: '', subheading: '', detail: '' }],
+                                }
+                              : s
+                          ),
+                        })
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Entry
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          </div>
+        )}
+
+        {/* TAB 5: STYLE, WALLPAPER & ALPHABET CHOICES */}
+        {activeTab === 'style' && (
+          <div className="space-y-5">
+            {/* Accent Color */}
+            <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Accent Color</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Applied to links, buttons, and section highlights across Resume and Portfolio.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {ACCENT_OPTIONS.map((opt) => {
+                  const active = uiPreferences.accentColor === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onUiChange({ ...uiPreferences, accentColor: opt.id })}
+                      className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+                        active
+                          ? 'border-slate-900 bg-slate-50 text-slate-900'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className={`w-3.5 h-3.5 rounded-full shrink-0 ${opt.swatchClass}`} />
+                      <span className="truncate">{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Alphabet / Font Style */}
+            <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Alphabet & Font Style</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Choose the lettering style used in your Resume, Portfolio Website, and HTML export.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {FONT_STYLE_OPTIONS.map((font) => {
+                  const active = uiPreferences.fontStyle === font.id;
+                  return (
+                    <button
+                      key={font.id}
+                      type="button"
+                      onClick={() => onUiChange({ ...uiPreferences, fontStyle: font.id })}
+                      className={`p-3 text-left rounded-xl border transition-colors cursor-pointer space-y-1 ${
+                        active
+                          ? 'border-blue-600 bg-blue-50/50'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-900">{font.label}</span>
+                        {active && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                      </div>
+                      <div
+                        className="text-sm font-medium text-slate-800 truncate"
+                        style={{ fontFamily: font.headingStack }}
+                      >
+                        {font.sampleText}
+                      </div>
+                      <div className="text-[11px] text-slate-500">{font.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Template Background Wallpaper */}
+            <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Portfolio Background Wallpaper
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Pick a curated template backdrop or upload your own wallpaper image.
+                  </p>
+                </div>
+                {uiPreferences.previewMode !== 'portfolio' && (
+                  <button
+                    type="button"
+                    onClick={() => onUiChange({ ...uiPreferences, previewMode: 'portfolio' })}
+                    className="text-xs font-medium text-blue-600 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Preview Portfolio →
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {WALLPAPER_OPTIONS.map((wp) => {
+                  const active = uiPreferences.wallpaper === wp.id;
+                  return (
+                    <button
+                      key={wp.id}
+                      type="button"
+                      onClick={() =>
+                        onUiChange({
+                          ...uiPreferences,
+                          wallpaper: wp.id as WallpaperPreset,
+                          previewMode: 'portfolio',
+                        })
+                      }
+                      className={`p-2.5 text-left rounded-xl border transition-colors cursor-pointer space-y-2 ${
+                        active
+                          ? 'border-blue-600 bg-blue-50/50'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div
+                        className="h-12 w-full rounded-lg border border-slate-200"
+                        style={{
+                          background: wp.previewSwatch,
+                          backgroundSize: wp.id === 'blueprint' || wp.id === 'contour' ? '14px 14px' : 'cover',
+                        }}
+                      />
+                      <div>
+                        <div className="text-xs font-semibold text-slate-900">{wp.label}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{wp.description}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Wallpaper Upload */}
+              <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                <input
+                  ref={wallpaperInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleCustomWallpaperUpload}
+                  className="hidden"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => wallpaperInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    Upload Custom Wallpaper
+                  </button>
+                  {uiPreferences.customWallpaperUrl && (
+                    <div className="flex items-center gap-2">
+                      {uiPreferences.wallpaper !== 'custom' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUiChange({
+                              ...uiPreferences,
+                              wallpaper: 'custom',
+                              previewMode: 'portfolio',
+                            })
+                          }
+                          className="text-xs font-medium text-blue-700 hover:underline cursor-pointer"
+                        >
+                          Activate Uploaded
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUiChange({
+                            ...uiPreferences,
+                            wallpaper: uiPreferences.wallpaper === 'custom' ? 'clean' : uiPreferences.wallpaper,
+                            customWallpaperUrl: '',
+                          })
+                        }
+                        className="text-xs font-medium text-slate-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {uiPreferences.customWallpaperUrl && (
+                  <div className="h-16 w-full rounded-lg border border-slate-200 overflow-hidden relative">
+                    <img
+                      src={uiPreferences.customWallpaperUrl}
+                      alt="Custom wallpaper preview"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 text-[10px] font-medium bg-slate-900/75 text-white rounded">
+                      {uiPreferences.wallpaper === 'custom' ? 'Active' : 'Saved'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

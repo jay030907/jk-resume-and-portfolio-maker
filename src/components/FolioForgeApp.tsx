@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import {
   Download,
@@ -5,93 +7,60 @@ import {
   Minimize2,
   Printer,
   RotateCcw,
-  Sparkles,
-  SlidersHorizontal,
   FileCode2,
+  Palette,
   X,
 } from 'lucide-react';
 import {
-  AccentColor,
-  AIChatMessage,
-  AIGenerationInput,
+  FontStyleId,
   PortfolioData,
-  PortfolioTheme,
-  PreviewMode,
-  ResumeTemplate,
   UIPreferences,
-  WorkspaceSnapshot,
-} from './types/portfolio';
-import { DEFAULT_PORTFOLIO_DATA, EMPTY_PORTFOLIO_DATA } from './data/presets';
-import { BuilderSidebar, BuilderTab } from './components/BuilderSidebar';
-import { AIModePanel } from './components/AIModePanel';
-import { ResumePreview } from './components/ResumePreview';
-import { PortfolioPreview } from './components/PortfolioPreview';
-import { buildStandalonePortfolioHtml } from './utils/exportHtml';
+} from '../types/portfolio';
+import {
+  DEFAULT_PORTFOLIO_DATA,
+  DEFAULT_UI_PREFERENCES,
+  EMPTY_PORTFOLIO_DATA,
+  FONT_STYLE_OPTIONS,
+} from '../data/presets';
+import { BuilderSidebar, BuilderTab } from './BuilderSidebar';
+import { ResumePreview } from './ResumePreview';
+import { PortfolioPreview } from './PortfolioPreview';
+import { buildStandalonePortfolioHtml } from '../utils/exportHtml';
+import { loadWorkspaceState, saveWorkspaceState } from '../utils/storage';
 
-const STORAGE_KEY = 'folioforge_portfolio_v1';
+export default function FolioForgeApp() {
+  const [data, setData] = useState<PortfolioData>(DEFAULT_PORTFOLIO_DATA);
+  const [uiPreferences, setUiPreferences] = useState<UIPreferences>(DEFAULT_UI_PREFERENCES);
+  const [hydrated, setHydrated] = useState(false);
 
-type LeftMode = 'builder' | 'ai';
-
-export default function App() {
-  const [data, setData] = useState<PortfolioData>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as PortfolioData;
-    } catch {
-      // Ignore storage read errors
-    }
-    return DEFAULT_PORTFOLIO_DATA;
-  });
-
-  const [leftMode, setLeftMode] = useState<LeftMode>('ai');
   const [builderTab, setBuilderTab] = useState<BuilderTab>('identity');
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('resume');
-  const [resumeTemplate, setResumeTemplate] = useState<ResumeTemplate>('classic');
-  const [portfolioTheme, setPortfolioTheme] = useState<PortfolioTheme>('editorial');
-  const [accentColor, setAccentColor] = useState<AccentColor>('blue');
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [aiMessages, setAiMessages] = useState<AIChatMessage[]>([]);
-
-  const [aiInput, setAiInput] = useState<AIGenerationInput>({
-    rawNotes: '',
-    targetRole: 'Software Engineering Intern',
-    tone: 'ATS Concise',
-    jobDescription: '',
-    includeCodingStats: true,
-  });
-
-  const currentUiPreferences: UIPreferences = {
-    previewMode,
-    resumeTemplate,
-    portfolioTheme,
-    showPhotoOnResume: data.profile.showPhotoOnResume,
-    accentColor,
-  };
-
-  const applyWorkspaceSnapshot = (snapshot: WorkspaceSnapshot) => {
-    setData({
-      ...snapshot.data,
-      profile: {
-        ...snapshot.data.profile,
-        showPhotoOnResume: snapshot.ui.showPhotoOnResume,
-      },
-    });
-    setPreviewMode(snapshot.ui.previewMode);
-    setResumeTemplate(snapshot.ui.resumeTemplate);
-    setPortfolioTheme(snapshot.ui.portfolioTheme);
-    if (snapshot.ui.accentColor) {
-      setAccentColor(snapshot.ui.accentColor);
-    }
-  };
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // Ignore storage quota errors when large photos are uploaded
-    }
-  }, [data]);
+    let active = true;
+    loadWorkspaceState()
+      .then((saved) => {
+        if (!active || !saved) return;
+        setData(saved.data);
+        setUiPreferences({
+          ...DEFAULT_UI_PREFERENCES,
+          ...saved.ui,
+          showPhotoOnResume: saved.data.profile.showPhotoOnResume,
+        });
+      })
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void saveWorkspaceState({ data, ui: uiPreferences });
+  }, [data, uiPreferences, hydrated]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -102,8 +71,8 @@ export default function App() {
   }, []);
 
   const handlePrintResume = () => {
-    if (previewMode !== 'resume') {
-      setPreviewMode('resume');
+    if (uiPreferences.previewMode !== 'resume') {
+      setUiPreferences((prev) => ({ ...prev, previewMode: 'resume' }));
       setTimeout(() => window.print(), 120);
     } else {
       window.print();
@@ -111,11 +80,20 @@ export default function App() {
   };
 
   const handleDownloadPortfolioHtml = () => {
-    const html = buildStandalonePortfolioHtml(data, portfolioTheme, accentColor);
+    const html = buildStandalonePortfolioHtml(
+      data,
+      uiPreferences.portfolioTheme,
+      uiPreferences.accentColor,
+      uiPreferences.wallpaper,
+      uiPreferences.customWallpaperUrl,
+      uiPreferences.fontStyle
+    );
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const slug = (data.profile.fullName || 'portfolio').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = (data.profile.fullName || 'portfolio')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
     a.href = url;
     a.download = `${slug}-portfolio.html`;
     a.click();
@@ -123,7 +101,9 @@ export default function App() {
   };
 
   const handleDownloadJson = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ data, uiPreferences }, null, 2)], {
+      type: 'application/json',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -152,40 +132,48 @@ export default function App() {
             type="button"
             onClick={() => {
               setIsFullscreenPreview(false);
-              setLeftMode('ai');
+              setBuilderTab('identity');
             }}
             className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              !isFullscreenPreview && leftMode === 'ai' ? 'text-slate-900 underline underline-offset-8' : ''
+              !isFullscreenPreview && builderTab === 'identity'
+                ? 'text-slate-900 underline underline-offset-8'
+                : ''
             }`}
           >
-            AI Mode
+            Identity
           </button>
           <button
             type="button"
             onClick={() => {
               setIsFullscreenPreview(false);
-              setLeftMode('builder');
+              setBuilderTab('projects');
             }}
             className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              !isFullscreenPreview && leftMode === 'builder' ? 'text-slate-900 underline underline-offset-8' : ''
+              !isFullscreenPreview && builderTab === 'projects'
+                ? 'text-slate-900 underline underline-offset-8'
+                : ''
             }`}
           >
-            Details & Links
+            Projects
           </button>
           <button
             type="button"
-            onClick={() => setPreviewMode('resume')}
+            onClick={() => setUiPreferences((prev) => ({ ...prev, previewMode: 'resume' }))}
             className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              previewMode === 'resume' ? 'text-slate-900 underline underline-offset-8' : ''
+              uiPreferences.previewMode === 'resume'
+                ? 'text-slate-900 underline underline-offset-8'
+                : ''
             }`}
           >
             Resume
           </button>
           <button
             type="button"
-            onClick={() => setPreviewMode('portfolio')}
+            onClick={() => setUiPreferences((prev) => ({ ...prev, previewMode: 'portfolio' }))}
             className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              previewMode === 'portfolio' ? 'text-slate-900 underline underline-offset-8' : ''
+              uiPreferences.previewMode === 'portfolio'
+                ? 'text-slate-900 underline underline-offset-8'
+                : ''
             }`}
           >
             Portfolio
@@ -205,70 +193,17 @@ export default function App() {
 
       {/* Main Split Workspace */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-        {/* Left Editor / AI Studio Column */}
+        {/* Left Guided Editor Column */}
         {!isFullscreenPreview && (
-          <aside className="no-print w-full lg:w-[440px] xl:w-[470px] border-b lg:border-b-0 lg:border-r border-slate-200 bg-[#F8F9FA] flex flex-col h-[540px] lg:h-[calc(100vh-4rem)] shrink-0">
-            {/* Workspace Mode Switcher */}
-            <div className="px-4 pt-4 pb-0">
-              <div className="grid grid-cols-2 gap-1 p-1 bg-slate-200/70 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setLeftMode('ai')}
-                  className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    leftMode === 'ai'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  AI Mode
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLeftMode('builder')}
-                  className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    leftMode === 'builder'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  Guided Details
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0">
-              {leftMode === 'builder' ? (
-                <BuilderSidebar
-                  data={data}
-                  onChange={setData}
-                  activeTab={builderTab}
-                  onTabChange={setBuilderTab}
-                  targetRole={aiInput.targetRole}
-                />
-              ) : (
-                <AIModePanel
-                  data={data}
-                  uiPreferences={currentUiPreferences}
-                  aiInput={aiInput}
-                  messages={aiMessages}
-                  onMessagesChange={setAiMessages}
-                  onAiInputChange={setAiInput}
-                  onApplySnapshot={applyWorkspaceSnapshot}
-                  onPhotoUpload={(photoDataUrl) =>
-                    setData((prev) => ({
-                      ...prev,
-                      profile: { ...prev.profile, photoDataUrl },
-                    }))
-                  }
-                  onSwitchToManualTab={() => {
-                    setLeftMode('builder');
-                    setBuilderTab('links');
-                  }}
-                />
-              )}
-            </div>
+          <aside className="no-print w-full lg:w-[440px] xl:w-[470px] border-b lg:border-b-0 lg:border-r border-slate-200 bg-[#F8F9FA] flex flex-col h-[560px] lg:h-[calc(100vh-4rem)] shrink-0">
+            <BuilderSidebar
+              data={data}
+              uiPreferences={uiPreferences}
+              onChange={setData}
+              onUiChange={setUiPreferences}
+              activeTab={builderTab}
+              onTabChange={setBuilderTab}
+            />
           </aside>
         )}
 
@@ -276,14 +211,16 @@ export default function App() {
         <main className="flex-1 flex flex-col min-w-0 lg:h-[calc(100vh-4rem)]">
           {/* Workspace Preview Toolbar */}
           <div className="no-print px-5 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               {/* Output Toggle */}
               <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
                 <button
                   type="button"
-                  onClick={() => setPreviewMode('resume')}
+                  onClick={() =>
+                    setUiPreferences((prev) => ({ ...prev, previewMode: 'resume' }))
+                  }
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    previewMode === 'resume'
+                    uiPreferences.previewMode === 'resume'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -292,9 +229,11 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPreviewMode('portfolio')}
+                  onClick={() =>
+                    setUiPreferences((prev) => ({ ...prev, previewMode: 'portfolio' }))
+                  }
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    previewMode === 'portfolio'
+                    uiPreferences.previewMode === 'portfolio'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -304,13 +243,15 @@ export default function App() {
               </div>
 
               {/* Template / Theme Switcher */}
-              {previewMode === 'resume' ? (
+              {uiPreferences.previewMode === 'resume' ? (
                 <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
                   <button
                     type="button"
-                    onClick={() => setResumeTemplate('classic')}
+                    onClick={() =>
+                      setUiPreferences((prev) => ({ ...prev, resumeTemplate: 'classic' }))
+                    }
                     className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      resumeTemplate === 'classic'
+                      uiPreferences.resumeTemplate === 'classic'
                         ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -319,9 +260,11 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setResumeTemplate('modern')}
+                    onClick={() =>
+                      setUiPreferences((prev) => ({ ...prev, resumeTemplate: 'modern' }))
+                    }
                     className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      resumeTemplate === 'modern'
+                      uiPreferences.resumeTemplate === 'modern'
                         ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
@@ -341,9 +284,11 @@ export default function App() {
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setPortfolioTheme(t.id)}
+                      onClick={() =>
+                        setUiPreferences((prev) => ({ ...prev, portfolioTheme: t.id }))
+                      }
                       className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                        portfolioTheme === t.id
+                        uiPreferences.portfolioTheme === t.id
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
@@ -353,10 +298,42 @@ export default function App() {
                   ))}
                 </div>
               )}
+
+              {/* Quick Alphabet / Font Style Selector */}
+              <select
+                aria-label="Alphabet style"
+                value={uiPreferences.fontStyle}
+                onChange={(e) =>
+                  setUiPreferences((prev) => ({
+                    ...prev,
+                    fontStyle: e.target.value as FontStyleId,
+                  }))
+                }
+                className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+              >
+                {FONT_STYLE_OPTIONS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    Font: {f.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Quick Jump to Wallpaper & Style Tab */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFullscreenPreview(false);
+                  setBuilderTab('style');
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Palette className="w-3.5 h-3.5" />
+                Wallpapers
+              </button>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {previewMode === 'resume' ? (
+              {uiPreferences.previewMode === 'resume' ? (
                 <button
                   type="button"
                   onClick={handlePrintResume}
@@ -385,7 +362,7 @@ export default function App() {
                 {isFullscreenPreview ? (
                   <>
                     <Minimize2 className="w-3.5 h-3.5" />
-                    Show AI & Editor
+                    Show Editor
                   </>
                 ) : (
                   <>
@@ -399,10 +376,22 @@ export default function App() {
 
           {/* Scrollable Preview Canvas */}
           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-[#F1F3F5]">
-            {previewMode === 'resume' ? (
-              <ResumePreview data={data} template={resumeTemplate} accentColor={accentColor} />
+            {uiPreferences.previewMode === 'resume' ? (
+              <ResumePreview
+                data={data}
+                template={uiPreferences.resumeTemplate}
+                accentColor={uiPreferences.accentColor}
+                fontStyle={uiPreferences.fontStyle}
+              />
             ) : (
-              <PortfolioPreview data={data} theme={portfolioTheme} accentColor={accentColor} />
+              <PortfolioPreview
+                data={data}
+                theme={uiPreferences.portfolioTheme}
+                accentColor={uiPreferences.accentColor}
+                wallpaper={uiPreferences.wallpaper}
+                customWallpaperUrl={uiPreferences.customWallpaperUrl}
+                fontStyle={uiPreferences.fontStyle}
+              />
             )}
           </div>
         </main>
@@ -422,7 +411,7 @@ export default function App() {
               <div>
                 <h2 className="text-base font-bold text-slate-900">Export & Workspace Tools</h2>
                 <p className="text-xs text-slate-600 mt-1">
-                  Download your ATS resume as PDF, export a ready-to-deploy HTML portfolio for Vercel or GitHub Pages, or reset your workspace.
+                  Download your ATS resume as PDF, export a ready-to-deploy HTML portfolio with your chosen wallpaper and font style, or reset your workspace.
                 </p>
               </div>
               <button
@@ -476,7 +465,7 @@ export default function App() {
               >
                 <div>
                   <div className="text-sm font-semibold text-slate-900">Backup Profile Data (.json)</div>
-                  <div className="text-xs text-slate-500">Save your details and linked accounts locally</div>
+                  <div className="text-xs text-slate-500">Save your details, projects, and linked accounts locally</div>
                 </div>
                 <Download className="w-4 h-4 text-slate-600 shrink-0" />
               </button>
@@ -498,7 +487,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setData(EMPTY_PORTFOLIO_DATA);
-                  setLeftMode('ai');
+                  setBuilderTab('identity');
                   setShowExportModal(false);
                 }}
                 className="px-3 py-2 text-xs font-medium text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-50 cursor-pointer"

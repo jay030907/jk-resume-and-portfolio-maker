@@ -1,4 +1,11 @@
-import { AccentColor, PortfolioData, PortfolioTheme } from '../types/portfolio';
+import {
+  AccentColor,
+  FontStyleId,
+  PortfolioData,
+  PortfolioTheme,
+  WallpaperPreset,
+} from '../types/portfolio';
+import { buildWallpaperCssRule, getFontConfig } from './themeStyles';
 
 function escapeHtml(value: string): string {
   return String(value || '')
@@ -15,7 +22,7 @@ export function sanitizeUrl(url: string, allowDataImage = false): string {
   if (allowDataImage && /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
     return trimmed;
   }
-  if (/^(https?:\/\/|mailto:|\/src\/assets\/)/i.test(trimmed)) {
+  if (/^(https?:\/\/|mailto:|\/images\/|\/src\/assets\/)/i.test(trimmed)) {
     return trimmed;
   }
   return '#';
@@ -32,7 +39,10 @@ const ACCENT_HEX: Record<AccentColor, { light: string; dark: string }> = {
 export function buildStandalonePortfolioHtml(
   data: PortfolioData,
   theme: PortfolioTheme,
-  accentColor: AccentColor = 'blue'
+  accentColor: AccentColor = 'blue',
+  wallpaper: WallpaperPreset = 'clean',
+  customWallpaperUrl?: string,
+  fontStyle: FontStyleId = 'jakarta'
 ): string {
   const { profile, accounts, projects, experience, education, skills, achievements, customSections = [] } = data;
   const activeAccounts = accounts.filter((a) => a.enabled && (a.url.trim() || a.username.trim()));
@@ -41,12 +51,14 @@ export function buildStandalonePortfolioHtml(
   const isPaper = theme === 'paper';
 
   const bg = isDark ? '#0A0A0C' : isPaper ? '#FAF8F5' : '#FFFFFF';
-  const surface = isDark ? '#141418' : isPaper ? '#F3EFEA' : '#F8FAFC';
+  const surface = isDark ? 'rgba(20, 20, 24, 0.92)' : isPaper ? 'rgba(243, 239, 234, 0.92)' : 'rgba(248, 250, 252, 0.92)';
   const border = isDark ? '#27272A' : '#E2E8F0';
   const textPrimary = isDark ? '#F8FAFC' : '#0F172A';
   const textSecondary = isDark ? '#A1A1AA' : '#475569';
   const accentSet = ACCENT_HEX[accentColor] || ACCENT_HEX.blue;
   const accent = isDark ? accentSet.dark : accentSet.light;
+  const fontCfg = getFontConfig(fontStyle);
+  const wallpaperCss = buildWallpaperCssRule(theme, wallpaper, customWallpaperUrl, accentColor);
 
   const photoHtml = profile.photoDataUrl
     ? `<img src="${escapeHtml(sanitizeUrl(profile.photoDataUrl, true))}" alt="${escapeHtml(profile.fullName)}" style="width:100%;height:100%;object-fit:cover;border-radius:16px;" />`
@@ -62,16 +74,19 @@ export function buildStandalonePortfolioHtml(
   <title>${escapeHtml(profile.fullName || 'Developer Portfolio')} — Portfolio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-      background: ${bg};
+      font-family: ${fontCfg.bodyStack};
+      background-color: ${bg};
+      ${wallpaperCss}
       color: ${textPrimary};
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
     }
+    h1, h2, h3 { font-family: ${fontCfg.headingStack}; }
     a { color: inherit; text-decoration: none; }
     .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
     header {
@@ -143,7 +158,7 @@ export function buildStandalonePortfolioHtml(
 <body>
   <div class="container">
     <header>
-      <strong style="font-size:18px;">${escapeHtml(profile.fullName || 'Portfolio')}</strong>
+      <strong style="font-size:18px;font-family:${escapeHtml(fontCfg.headingStack)};">${escapeHtml(profile.fullName || 'Portfolio')}</strong>
       <nav class="nav">
         <a href="#profiles">Profiles</a>
         <a href="#projects">Projects</a>
