@@ -1,0 +1,6 @@
+{
+  "name": "FolioForge",
+  "description": "Smart resume and portfolio builder for beginners with linked coding accounts and AI generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
